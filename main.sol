@@ -586,3 +586,87 @@ contract MoonCapII {
         podIds_ = new bytes32[](len);
         curators_ = new address[](len);
         riskTiers_ = new uint8[](len);
+        totalStakes_ = new uint256[](len);
+        frozenFlags_ = new bool[](len);
+        for (uint256 i = 0; i < len; i++) {
+            bytes32 id = _podIds[fromIndex + i];
+            PodState storage p = _pods[id];
+            podIds_[i] = id;
+            curators_[i] = p.curator;
+            riskTiers_[i] = p.riskTier;
+            totalStakes_[i] = p.totalStakeWei;
+            frozenFlags_[i] = p.frozen;
+        }
+    }
+
+    function lastPullBlock(bytes32 podId, address staker) external view returns (uint256) {
+        return _lastPullBlock[podId][staker];
+    }
+
+    function canPull(bytes32 podId, address staker) external view returns (bool) {
+        if (_stakeInPod[podId][staker] == 0) return false;
+        if (_pods[podId].frozen) return false;
+        uint256 last = _lastPullBlock[podId][staker];
+        if (last == 0) return true;
+        return block.number - last >= cooldownBlocks;
+    }
+
+    function getSnapshotAt(bytes32 podId, uint256 index) external view returns (uint256 totalStakeWei_, uint256 blockNumber_, uint256 timestamp_) {
+        PodSnapshot[] storage snap = _podSnapshots[podId];
+        if (index >= snap.length) revert MC2_InvalidBatchLength();
+        PodSnapshot storage s = snap[index];
+        return (s.totalStakeWei, s.blockNumber, s.timestamp);
+    }
+
+    function getSnapshotCount(bytes32 podId) external view returns (uint256) {
+        return _podSnapshots[podId].length;
+    }
+
+    function getTierStats(uint8 riskTier) external view returns (uint256 totalStakeWei_, uint256 podCount_, uint256 capWei_) {
+        if (riskTier > MC2_MAX_RISK_TIER) revert MC2_InvalidRiskTier();
+        return (tierTotalStakeWei[riskTier], tierPodCount[riskTier], tierCapWei[riskTier]);
+    }
+
+    function getRiskLabelForTier(uint8 riskTier) external pure returns (bytes32) {
+        if (riskTier == 0) return MC2_RISK_LABEL_0;
+        if (riskTier == 1) return MC2_RISK_LABEL_1;
+        if (riskTier == 2) return MC2_RISK_LABEL_2;
+        if (riskTier == 3) return MC2_RISK_LABEL_3;
+        if (riskTier == 4) return MC2_RISK_LABEL_4;
+        if (riskTier == 5) return MC2_RISK_LABEL_5;
+        return bytes32(0);
+    }
+
+    function getStakerPortfolio(address staker, bytes32[] calldata podIds) external view returns (uint256[] memory stakes_) {
+        stakes_ = new uint256[](podIds.length);
+        for (uint256 i = 0; i < podIds.length; i++) {
+            stakes_[i] = _stakeInPod[podIds[i]][staker];
+        }
+    }
+
+    function getPodIdsByCurator(address curator) external view returns (bytes32[] memory) {
+        return _podIdsByCurator[curator];
+    }
+
+    function getAllocatorListLength() external view returns (uint256) {
+        return _allocatorList.length;
+    }
+
+    function getAllocatorAt(uint256 index) external view returns (address) {
+        if (index >= _allocatorList.length) revert MC2_InvalidBatchLength();
+        return _allocatorList[index];
+    }
+
+    function getAggregateStats() external view returns (
+        uint256 totalAllocatedWei_,
+        uint256 totalPulledWei_,
+        uint256 allocationCount_,
+        uint256 pullCount_,
+        uint256 netStakeWei_
+    ) {
+        return (totalAllocatedWei, totalPulledWei, allocationCount, pullCount, totalAllocatedWei > totalPulledWei ? totalAllocatedWei - totalPulledWei : 0);
+    }
+
+    function wouldAllocateSucceed(bytes32 podId, uint256 amountWei) external view returns (bool) {
+        if (podId == bytes32(0) || amountWei == 0) return false;
+        PodState storage pod = _pods[podId];

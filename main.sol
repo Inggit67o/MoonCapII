@@ -502,3 +502,87 @@ contract MoonCapII {
             if (!okRefund) revert MC2_TransferFailed();
         }
         emit BatchAllocated(podIds.length, msg.sender, totalNeeded, block.number);
+    }
+
+    // -------------------------------------------------------------------------
+    // VIEWS
+    // -------------------------------------------------------------------------
+
+    function getPod(bytes32 podId) external view returns (
+        address curator_,
+        uint8 riskTier_,
+        uint256 totalStakeWei_,
+        uint256 minStakeWei_,
+        uint256 maxStakeWei_,
+        uint256 performanceFeeBps_,
+        uint256 managementFeeBps_,
+        uint256 createdAtBlock_,
+        bool frozen_,
+        bool exists_
+    ) {
+        PodState storage p = _pods[podId];
+        return (
+            p.curator,
+            p.riskTier,
+            p.totalStakeWei,
+            p.minStakeWei,
+            p.maxStakeWei,
+            p.performanceFeeBps,
+            p.managementFeeBps,
+            p.createdAtBlock,
+            p.frozen,
+            p.exists
+        );
+    }
+
+    function podExists(bytes32 podId) external view returns (bool) {
+        return _pods[podId].exists;
+    }
+
+    function stakeInPod(bytes32 podId, address staker) external view returns (uint256) {
+        return _stakeInPod[podId][staker];
+    }
+
+    function getPodIdAt(uint256 index) external view returns (bytes32) {
+        if (index >= _podIds.length) revert MC2_InvalidBatchLength();
+        return _podIds[index];
+    }
+
+    function getStakersInPod(bytes32 podId) external view returns (address[] memory) {
+        return _stakersInPod[podId];
+    }
+
+    function isAllocatorWhitelisted(address a) external view returns (bool) {
+        return _allocatorWhitelist[a] || a == topCurator;
+    }
+
+    function isLatticePaused() external view returns (bool) {
+        return _latticePaused[MC2_LATTICE_NAMESPACE];
+    }
+
+    function contractBalanceWei() external view returns (uint256) {
+        return address(this).balance;
+    }
+
+    function getGlobalStats() external view returns (
+        uint256 totalPods_,
+        uint256 deployBlock_,
+        uint256 currentFeeBps_,
+        uint256 cooldownBlocks_,
+        uint256 treasuryWei_
+    ) {
+        return (podCount, deployBlock, globalFeeBps, cooldownBlocks, totalTreasuryWei);
+    }
+
+    function getPodsInRange(uint256 fromIndex, uint256 toIndex) external view returns (
+        bytes32[] memory podIds_,
+        address[] memory curators_,
+        uint8[] memory riskTiers_,
+        uint256[] memory totalStakes_,
+        bool[] memory frozenFlags_
+    ) {
+        if (fromIndex > toIndex || toIndex >= _podIds.length) revert MC2_InvalidBatchLength();
+        uint256 len = toIndex - fromIndex + 1;
+        podIds_ = new bytes32[](len);
+        curators_ = new address[](len);
+        riskTiers_ = new uint8[](len);

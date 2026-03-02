@@ -250,3 +250,87 @@ contract MoonCapII {
         _maybeTakeSnapshot(podId, 0);
 
         emit PodSpawned(podId, topCurator, riskTier, minStakeWei, block.number);
+        return true;
+    }
+
+    function _updateTierStatsOnAlloc(uint8 riskTier, uint256 amountWei, bool isAdd) internal {
+        if (riskTier > MC2_MAX_RISK_TIER) return;
+        if (isAdd) {
+            tierTotalStakeWei[riskTier] += amountWei;
+        } else {
+            if (tierTotalStakeWei[riskTier] >= amountWei) tierTotalStakeWei[riskTier] -= amountWei;
+        }
+    }
+
+    function _maybeTakeSnapshot(bytes32 podId, uint256 currentTotal) internal {
+        PodSnapshot[] storage snap = _podSnapshots[podId];
+        if (snap.length >= MC2_MAX_SNAPSHOTS_PER_POD) return;
+        if (snap.length > 0 && block.number < snap[snap.length - 1].blockNumber + MC2_SNAPSHOT_INTERVAL) return;
+        snap.push(PodSnapshot({ totalStakeWei: currentTotal, blockNumber: block.number, timestamp: block.timestamp }));
+        _snapshotCountByPod[podId] = snap.length;
+    }
+
+    function allocate(bytes32 podId) external payable nonReentrant whenLatticeNotPaused {
+        if (podId == bytes32(0)) revert MC2_ZeroPod();
+        PodState storage pod = _pods[podId];
+        if (!pod.exists) revert MC2_PodNotFound();
+        if (pod.frozen) revert MC2_PodFrozen();
+        if (!_allocatorWhitelist[msg.sender] && topCurator != msg.sender) revert MC2_AllocatorNotWhitelisted();
+        if (msg.value == 0) revert MC2_ZeroAmount();
+        if (pod.minStakeWei > 0 && msg.value < pod.minStakeWei) revert MC2_BelowMinStake();
+        if (pod.maxStakeWei > 0 && pod.totalStakeWei + msg.value > pod.maxStakeWei) revert MC2_AboveMaxStake();
+        if (tierCapWei[pod.riskTier] > 0 && tierTotalStakeWei[pod.riskTier] + (msg.value - (msg.value * globalFeeBps) / MC2_DENOM_BPS) > tierCapWei[pod.riskTier]) revert MC2_AboveMaxStake();
+
+        uint256 fee = (msg.value * globalFeeBps) / MC2_DENOM_BPS;
+        uint256 toPod = msg.value - fee;
+        if (fee > 0 && feeCollector != address(0)) {
+            (bool okFee,) = feeCollector.call{ value: fee }("");
+            if (!okFee) revert MC2_TransferFailed();
+        }
+
+        pod.totalStakeWei += toPod;
+        _stakeInPod[podId][msg.sender] += toPod;
+        if (_stakerIndexInPod[podId][msg.sender] == 0) {
+            _stakersInPod[podId].push(msg.sender);
+            _stakerIndexInPod[podId][msg.sender] = _stakersInPod[podId].length;
+        }
+        _updateTierStatsOnAlloc(pod.riskTier, toPod, true);
+        totalAllocatedWei += toPod;
+        allocationCount++;
+        totalStakeByAllocator[msg.sender] += toPod;
+        allocatorAllocationCount[msg.sender]++;
+        _maybeTakeSnapshot(podId, pod.totalStakeWei);
+
+        emit DegenAllocated(msg.sender, podId, toPod, block.number);
+    }
+
+    function pullStake(bytes32 podId, uint256 amountWei) external nonReentrant whenLatticeNotPaused {
+        if (podId == bytes32(0)) revert MC2_ZeroPod();
+        PodState storage pod = _pods[podId];
+        if (!pod.exists) revert MC2_PodNotFound();
+        if (pod.frozen) revert MC2_PodFrozen();
+        uint256 staked = _stakeInPod[podId][msg.sender];
+        if (amountWei == 0 || staked < amountWei) revert MC2_InsufficientStake();
+
+        uint256 sincePull = block.number - _lastPullBlock[podId][msg.sender];
+        if (sincePull < cooldownBlocks && _lastPullBlock[podId][msg.sender] != 0) revert MC2_CooldownActive();
+
+        _lastPullBlock[podId][msg.sender] = block.number;
+        pod.totalStakeWei -= amountWei;
+        _stakeInPod[podId][msg.sender] -= amountWei;
+        _updateTierStatsOnAlloc(pod.riskTier, amountWei, false);
+        totalPulledWei += amountWei;
+        pullCount++;
+        totalStakeByAllocator[msg.sender] -= amountWei;
+        _maybeTakeSnapshot(podId, pod.totalStakeWei);
+
+        (bool ok,) = msg.sender.call{ value: amountWei }("");
+        if (!ok) revert MC2_TransferFailed();
+
+        emit StakePulled(msg.sender, podId, amountWei, block.number);
+        emit PodRebalanced(podId, pod.totalStakeWei, block.number);
+    }
+
+    function rebalancePod(bytes32 podId) external nonReentrant {
+        if (podId == bytes32(0)) revert MC2_ZeroPod();
+        PodState storage pod = _pods[podId];

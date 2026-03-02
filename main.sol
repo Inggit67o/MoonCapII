@@ -334,3 +334,87 @@ contract MoonCapII {
     function rebalancePod(bytes32 podId) external nonReentrant {
         if (podId == bytes32(0)) revert MC2_ZeroPod();
         PodState storage pod = _pods[podId];
+        if (!pod.exists) revert MC2_PodNotFound();
+        if (msg.sender != pod.curator && msg.sender != topCurator) revert MC2_NotCurator();
+        emit PodRebalanced(podId, pod.totalStakeWei, block.number);
+    }
+
+    function capturePerformanceFee(bytes32 podId, uint256 amountWei) external onlyCurator nonReentrant {
+        if (podId == bytes32(0)) revert MC2_ZeroPod();
+        PodState storage pod = _pods[podId];
+        if (!pod.exists) revert MC2_PodNotFound();
+        if (amountWei == 0 || amountWei > address(this).balance) revert MC2_ZeroAmount();
+        uint256 maxFee = (pod.totalStakeWei * pod.performanceFeeBps) / MC2_DENOM_BPS;
+        if (amountWei > maxFee) revert MC2_PerformanceFeeTooHigh();
+
+        if (feeCollector != address(0)) {
+            (bool ok,) = feeCollector.call{ value: amountWei }("");
+            if (!ok) revert MC2_TransferFailed();
+        }
+        emit PerformanceFeeCaptured(podId, amountWei, block.number);
+    }
+
+    function sweepCuratorFees() external onlyCurator nonReentrant {
+        uint256 bal = address(this).balance;
+        if (bal == 0) revert MC2_ZeroAmount();
+        (bool ok,) = feeCollector != address(0) ? feeCollector.call{ value: bal }("") : msg.sender.call{ value: bal }("");
+        if (!ok) revert MC2_TransferFailed();
+        emit CuratorFeeSwept(feeCollector != address(0) ? feeCollector : msg.sender, bal, block.number);
+    }
+
+    function setPodRiskTier(bytes32 podId, uint8 newTier) external onlyCurator nonReentrant {
+        if (podId == bytes32(0)) revert MC2_ZeroPod();
+        PodState storage pod = _pods[podId];
+        if (!pod.exists) revert MC2_PodNotFound();
+        if (newTier > MC2_MAX_RISK_TIER) revert MC2_InvalidRiskTier();
+        uint8 prev = pod.riskTier;
+        pod.riskTier = newTier;
+        emit RiskTierUpdated(podId, prev, newTier, block.number);
+    }
+
+    function setPodMinStake(bytes32 podId, uint256 newMinStakeWei) external onlyCurator nonReentrant {
+        if (podId == bytes32(0)) revert MC2_ZeroPod();
+        PodState storage pod = _pods[podId];
+        if (!pod.exists) revert MC2_PodNotFound();
+        uint256 prev = pod.minStakeWei;
+        pod.minStakeWei = newMinStakeWei;
+        emit MinStakeUpdated(podId, prev, newMinStakeWei, block.number);
+    }
+
+    function setPodFrozen(bytes32 podId, bool frozen) external onlyCurator nonReentrant {
+        if (podId == bytes32(0)) revert MC2_ZeroPod();
+        PodState storage pod = _pods[podId];
+        if (!pod.exists) revert MC2_PodNotFound();
+        pod.frozen = frozen;
+        emit PodFrozen(podId, frozen, block.number);
+    }
+
+    function setLatticePaused(bool paused) external onlyCurator {
+        _latticePaused[MC2_LATTICE_NAMESPACE] = paused;
+        emit LatticePaused(MC2_LATTICE_NAMESPACE, paused, block.number);
+    }
+
+    function setAllocatorWhitelist(address allocator, bool allowed) external onlyCurator {
+        if (allocator == address(0)) revert MC2_ZeroAddress();
+        _allocatorWhitelist[allocator] = allowed;
+        if (allowed) {
+            bool found = false;
+            for (uint256 i = 0; i < _allocatorList.length; i++) {
+                if (_allocatorList[i] == allocator) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found && _allocatorList.length < MC2_ALLOCATOR_LIST_MAX) {
+                _allocatorList.push(allocator);
+            }
+        }
+        emit AllocatorWhitelisted(allocator, allowed, block.number);
+    }
+
+    function setGlobalFeeBps(uint256 newFeeBps) external onlyCurator {
+        if (newFeeBps > MC2_MANAGEMENT_FEE_BPS_CAP) revert MC2_InvalidFeeBps();
+        uint256 prev = globalFeeBps;
+        globalFeeBps = newFeeBps;
+        emit FeeBpsUpdated(prev, newFeeBps, block.number);
+    }

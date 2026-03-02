@@ -418,3 +418,87 @@ contract MoonCapII {
         globalFeeBps = newFeeBps;
         emit FeeBpsUpdated(prev, newFeeBps, block.number);
     }
+
+    function setCooldownBlocks(uint256 blocks) external onlyCurator {
+        if (blocks > 1_000_000) revert MC2_InvalidCooldownBlocks();
+        cooldownBlocks = blocks;
+    }
+
+    function setTierCapWei(uint8 riskTier, uint256 capWei) external onlyCurator {
+        if (riskTier > MC2_MAX_RISK_TIER) revert MC2_InvalidRiskTier();
+        tierCapWei[riskTier] = capWei;
+    }
+
+    function takeSnapshot(bytes32 podId) external onlyCurator nonReentrant {
+        if (podId == bytes32(0)) revert MC2_ZeroPod();
+        PodState storage pod = _pods[podId];
+        if (!pod.exists) revert MC2_PodNotFound();
+        _maybeTakeSnapshot(podId, pod.totalStakeWei);
+    }
+
+    function emergencyDrain(uint256 amountWei) external onlyEmergencyGuard nonReentrant {
+        if (amountWei == 0 || amountWei > address(this).balance) revert MC2_ZeroAmount();
+        (bool ok,) = treasury != address(0) ? treasury.call{ value: amountWei }("") : msg.sender.call{ value: amountWei }("");
+        if (!ok) revert MC2_TransferFailed();
+        totalTreasuryWei += amountWei;
+        emit EmergencyDrain(treasury != address(0) ? treasury : msg.sender, amountWei, block.number);
+    }
+
+    function topTreasury() external payable {
+        if (msg.value == 0) revert MC2_ZeroAmount();
+        totalTreasuryWei += msg.value;
+        emit TreasuryTopped(msg.value, block.number);
+    }
+
+    // -------------------------------------------------------------------------
+    // BATCH ALLOCATE
+    // -------------------------------------------------------------------------
+
+    function batchAllocate(bytes32[] calldata podIds, uint256[] calldata amountsWei) external payable nonReentrant whenLatticeNotPaused {
+        if (podIds.length != amountsWei.length || podIds.length == 0 || podIds.length > MC2_MAX_BATCH_ALLOC) revert MC2_InvalidBatchLength();
+        if (!_allocatorWhitelist[msg.sender] && topCurator != msg.sender) revert MC2_AllocatorNotWhitelisted();
+
+        uint256 totalNeeded = 0;
+        for (uint256 i = 0; i < podIds.length; i++) {
+            totalNeeded += amountsWei[i];
+        }
+        if (msg.value < totalNeeded) revert MC2_InsufficientStake();
+
+        uint256 globalFeeTotal = 0;
+        for (uint256 i = 0; i < podIds.length; i++) {
+            if (podIds[i] == bytes32(0)) revert MC2_ZeroPod();
+            PodState storage pod = _pods[podIds[i]];
+            if (!pod.exists) revert MC2_PodNotFound();
+            if (pod.frozen) revert MC2_PodFrozen();
+            uint256 amt = amountsWei[i];
+            if (amt == 0) continue;
+            if (pod.minStakeWei > 0 && amt < pod.minStakeWei) revert MC2_BelowMinStake();
+            if (pod.maxStakeWei > 0 && pod.totalStakeWei + amt > pod.maxStakeWei) revert MC2_AboveMaxStake();
+
+            uint256 fee = (amt * globalFeeBps) / MC2_DENOM_BPS;
+            globalFeeTotal += fee;
+            uint256 toPod = amt - fee;
+            pod.totalStakeWei += toPod;
+            _stakeInPod[podIds[i]][msg.sender] += toPod;
+            if (_stakerIndexInPod[podIds[i]][msg.sender] == 0) {
+                _stakersInPod[podIds[i]].push(msg.sender);
+                _stakerIndexInPod[podIds[i]][msg.sender] = _stakersInPod[podIds[i]].length;
+            }
+            _updateTierStatsOnAlloc(pod.riskTier, toPod, true);
+            totalAllocatedWei += toPod;
+            allocationCount++;
+            totalStakeByAllocator[msg.sender] += toPod;
+            allocatorAllocationCount[msg.sender]++;
+            _maybeTakeSnapshot(podIds[i], pod.totalStakeWei);
+            emit DegenAllocated(msg.sender, podIds[i], toPod, block.number);
+        }
+
+        if (globalFeeTotal > 0 && feeCollector != address(0)) {
+            (bool okFee,) = feeCollector.call{ value: globalFeeTotal }("");
+            if (!okFee) revert MC2_TransferFailed();
+        }
+        if (msg.value > totalNeeded) {
+            (bool okRefund,) = msg.sender.call{ value: msg.value - totalNeeded }("");
+            if (!okRefund) revert MC2_TransferFailed();
+        }
+        emit BatchAllocated(podIds.length, msg.sender, totalNeeded, block.number);

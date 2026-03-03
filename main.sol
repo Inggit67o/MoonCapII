@@ -1006,3 +1006,87 @@ contract MoonCapII {
         return account == treasury;
     }
 
+    /// @notice Deploy block (immutable).
+    function getDeployBlock() external view returns (uint256) {
+        return deployBlock;
+    }
+
+    /// @notice Current block number (convenience).
+    function getCurrentBlock() external view returns (uint256) {
+        return block.number;
+    }
+
+    /// @notice Cooldown blocks (mutable by curator).
+    function getCooldownBlocks() external view returns (uint256) {
+        return cooldownBlocks;
+    }
+
+    /// @notice Global fee in basis points.
+    function getGlobalFeeBps() external view returns (uint256) {
+        return globalFeeBps;
+    }
+
+    /// @notice Total treasury wei ever topped (cumulative).
+    function getTotalTreasuryWei() external view returns (uint256) {
+        return totalTreasuryWei;
+    }
+
+    /// @notice Contract ETH balance.
+    function getContractBalance() external view returns (uint256) {
+        return address(this).balance;
+    }
+
+    /// @notice Total stake by allocator (aggregate across pods).
+    function getTotalStakeByAllocator(address allocator) external view returns (uint256) {
+        return totalStakeByAllocator[allocator];
+    }
+
+    /// @notice Number of allocations made by allocator.
+    function getAllocatorAllocationCount(address allocator) external view returns (uint256) {
+        return allocatorAllocationCount[allocator];
+    }
+
+    /// @notice Would pull succeed for staker in pod for amount (no state change).
+    function wouldPullSucceed(bytes32 podId, address staker, uint256 amountWei) external view returns (bool) {
+        if (podId == bytes32(0) || amountWei == 0) return false;
+        PodState storage pod = _pods[podId];
+        if (!pod.exists || pod.frozen) return false;
+        if (_stakeInPod[podId][staker] < amountWei) return false;
+        uint256 last = _lastPullBlock[podId][staker];
+        if (last != 0 && block.number - last < cooldownBlocks) return false;
+        return true;
+    }
+
+    /// @notice Fee and net for allocation (at current global bps).
+    function quoteAllocation(uint256 amountWei) external view returns (uint256 feeWei_, uint256 netToPod_) {
+        feeWei_ = (amountWei * globalFeeBps) / MC2_DENOM_BPS;
+        netToPod_ = amountWei - feeWei_;
+    }
+
+    /// @notice Sum of tier total stakes (all tiers).
+    function getGrandTotalStakeByTier() external view returns (uint256 grandTotal_) {
+        for (uint8 t = 0; t <= MC2_MAX_RISK_TIER; t++) {
+            grandTotal_ += tierTotalStakeWei[t];
+        }
+    }
+
+    /// @notice Total number of pods per tier (for analytics).
+    function getTierPodCounts() external view returns (uint256[] memory counts_) {
+        counts_ = new uint256[](MC2_MAX_RISK_TIER + 1);
+        for (uint8 t = 0; t <= MC2_MAX_RISK_TIER; t++) {
+            counts_[t] = tierPodCount[t];
+        }
+    }
+
+    /// @notice Tier caps (for analytics).
+    function getTierCaps() external view returns (uint256[] memory caps_) {
+        caps_ = new uint256[](MC2_MAX_RISK_TIER + 1);
+        for (uint8 t = 0; t <= MC2_MAX_RISK_TIER; t++) {
+            caps_[t] = tierCapWei[t];
+        }
+    }
+
+    /// @notice Single pod risk tier.
+    function getPodRiskTier(bytes32 podId) external view returns (uint8) {
+        return _pods[podId].riskTier;
+    }

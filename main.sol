@@ -1174,3 +1174,87 @@ contract MoonCapII {
     }
 
     /// @notice Whether global stats are consistent (total allocated - total pulled <= balance).
+    function isGlobalStatsConsistent() external view returns (bool) {
+        uint256 net = totalAllocatedWei > totalPulledWei ? totalAllocatedWei - totalPulledWei : 0;
+        return address(this).balance >= net;
+    }
+
+    /// @notice Pod count for curator (alias).
+    function getPodCountForCurator(address curator) external view returns (uint256) {
+        return _podCountByCurator[curator];
+    }
+
+    /// @notice Snapshot interval constant (blocks).
+    function getSnapshotIntervalBlocks() external pure returns (uint256) {
+        return MC2_SNAPSHOT_INTERVAL;
+    }
+
+    /// @notice Min stake floor constant.
+    function getMinStakeWeiFloor() external pure returns (uint256) {
+        return MC2_MIN_STAKE_WEI_FLOOR;
+    }
+
+    /// @notice Default cooldown constant.
+    function getDefaultCooldownBlocks() external pure returns (uint256) {
+        return MC2_DEFAULT_COOLDOWN;
+    }
+
+    /// @notice Allocator list max size.
+    function getAllocatorListMax() external pure returns (uint256) {
+        return MC2_ALLOCATOR_LIST_MAX;
+    }
+
+    /// @notice Risk tier cap multiplier constant.
+    function getRiskTierCapMultiplier() external pure returns (uint256) {
+        return MC2_RISK_TIER_CAP_MULTIPLIER;
+    }
+
+    /// @notice Basis points denominator (10000).
+    function bpsDenominator() external pure returns (uint256) {
+        return MC2_DENOM_BPS;
+    }
+
+    /// @notice Max risk tier index (5).
+    function maxRiskTierIndex() external pure returns (uint8) {
+        return MC2_MAX_RISK_TIER;
+    }
+
+    /// @notice One-time fee quote at custom bps (pure).
+    function quoteFeeAtBps(uint256 amountWei, uint256 bps) external pure returns (uint256 fee_, uint256 net_) {
+        if (bps > MC2_DENOM_BPS) {
+            fee_ = amountWei;
+            net_ = 0;
+        } else {
+            fee_ = (amountWei * bps) / MC2_DENOM_BPS;
+            net_ = amountWei - fee_;
+        }
+    }
+
+    /// @notice Encode pod id from components (alternative to derivePodId).
+    function encodePodId(bytes32 seed, uint256 nonce) external view returns (bytes32) {
+        return keccak256(abi.encodePacked(topCurator, seed, nonce));
+    }
+
+    /// @notice Check two pod ids equal (pure).
+    function podIdsEqual(bytes32 a, bytes32 b) external pure returns (bool) {
+        return a == b;
+    }
+
+    /// @notice Zero address check (pure).
+    function isZeroAddress(address account) external pure returns (bool) {
+        return account == address(0);
+    }
+
+    /// @notice Contract balance at call time.
+    function balance() external view returns (uint256) {
+        return address(this).balance;
+    }
+
+    /// @notice Total allocation count (ever).
+    function totalAllocationCount() external view returns (uint256) {
+        return allocationCount;
+    }
+
+    /// @notice Total pull count (ever).
+    function totalPullCount() external view returns (uint256) {
+        return pullCount;

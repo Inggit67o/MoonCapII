@@ -1258,3 +1258,87 @@ contract MoonCapII {
     /// @notice Total pull count (ever).
     function totalPullCount() external view returns (uint256) {
         return pullCount;
+    }
+
+    /// @notice Net stake (allocated - pulled).
+    function netStakeWei() external view returns (uint256) {
+        return totalAllocatedWei > totalPulledWei ? totalAllocatedWei - totalPulledWei : 0;
+    }
+
+    /// @notice Last fee block for pod (for management fee calc).
+    function getPodLastFeeBlock(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].lastFeeBlock;
+    }
+
+    /// @notice Whether pod has any stakers.
+    function podHasStakers(bytes32 podId) external view returns (bool) {
+        return _stakersInPod[podId].length > 0;
+    }
+
+    /// @notice Whether staker has any stake in pod.
+    function hasStakeInPod(bytes32 podId, address staker) external view returns (bool) {
+        return _stakeInPod[podId][staker] > 0;
+    }
+
+    /// @notice Stake amount in pod for staker (alias).
+    function getStake(bytes32 podId, address staker) external view returns (uint256) {
+        return _stakeInPod[podId][staker];
+    }
+
+    /// @notice Pod id at index (alias).
+    function podIdAt(uint256 index) external view returns (bytes32) {
+        if (index >= _podIds.length) revert MC2_InvalidBatchLength();
+        return _podIds[index];
+    }
+
+    /// @notice Exists at pod id (alias).
+    function exists(bytes32 podId) external view returns (bool) {
+        return _pods[podId].exists;
+    }
+
+    /// @notice Frozen at pod id (alias).
+    function frozen(bytes32 podId) external view returns (bool) {
+        return _pods[podId].frozen;
+    }
+
+    /// @notice Total stake at pod id (alias).
+    function totalStake(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].totalStakeWei;
+    }
+
+    /// @notice Risk tier at pod id (alias).
+    function riskTier(bytes32 podId) external view returns (uint8) {
+        return _pods[podId].riskTier;
+    }
+
+    /// @notice Curator at pod id (alias).
+    function curator(bytes32 podId) external view returns (address) {
+        return _pods[podId].curator;
+    }
+
+    /// @notice Min stake at pod id (alias).
+    function minStake(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].minStakeWei;
+    }
+
+    /// @notice Max stake at pod id (alias).
+    function maxStake(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].maxStakeWei;
+    }
+
+    /// @notice Performance fee bps at pod id (alias).
+    function performanceFeeBps(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].performanceFeeBps;
+    }
+
+    /// @notice Management fee bps at pod id (alias).
+    function managementFeeBps(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].managementFeeBps;
+    }
+
+    /// @notice Created-at block at pod id (alias).
+    function createdAtBlock(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].createdAtBlock;
+    }
+
+    /// @notice Last fee block at pod id (alias).

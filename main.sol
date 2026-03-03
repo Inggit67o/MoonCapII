@@ -1342,3 +1342,87 @@ contract MoonCapII {
     }
 
     /// @notice Last fee block at pod id (alias).
+    function lastFeeBlock(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].lastFeeBlock;
+    }
+
+    /// @notice Total wei in tier (alias for getTierStats total).
+    function tierTotalStake(uint8 riskTier) external view returns (uint256) {
+        if (riskTier > MC2_MAX_RISK_TIER) return 0;
+        return tierTotalStakeWei[riskTier];
+    }
+
+    /// @notice Pod count in tier (alias).
+    function tierPodCountFor(uint8 riskTier) external view returns (uint256) {
+        if (riskTier > MC2_MAX_RISK_TIER) return 0;
+        return tierPodCount[riskTier];
+    }
+
+    /// @notice Tier cap for tier (alias).
+    function tierCap(uint8 riskTier) external view returns (uint256) {
+        if (riskTier > MC2_MAX_RISK_TIER) return 0;
+        return tierCapWei[riskTier];
+    }
+
+    /// @notice Grand total stake across all tiers.
+    function grandTotalStakeAllTiers() external view returns (uint256 sum_) {
+        for (uint8 t = 0; t <= MC2_MAX_RISK_TIER; t++) {
+            sum_ += tierTotalStakeWei[t];
+        }
+    }
+
+    /// @notice Check if pod is not frozen and exists (convenience).
+    function isPodActive(bytes32 podId) external view returns (bool) {
+        PodState storage p = _pods[podId];
+        return p.exists && !p.frozen;
+    }
+
+    /// @notice Fee collector address (immutable).
+    function getFeeCollector() external view returns (address) {
+        return feeCollector;
+    }
+
+    /// @notice Treasury address (immutable).
+    function getTreasury() external view returns (address) {
+        return treasury;
+    }
+
+    /// @notice Top curator address (immutable).
+    function getTopCurator() external view returns (address) {
+        return topCurator;
+    }
+
+    /// @notice Emergency guard address (immutable).
+    function getEmergencyGuard() external view returns (address) {
+        return emergencyGuard;
+    }
+
+    /// @notice Deploy block (immutable).
+    function getDeployBlockNum() external view returns (uint256) {
+        return deployBlock;
+    }
+
+    /// @notice Current global fee bps.
+    function getFeeBps() external view returns (uint256) {
+        return globalFeeBps;
+    }
+
+    /// @notice Cooldown in blocks.
+    function getCooldownBlocksNum() external view returns (uint256) {
+        return cooldownBlocks;
+    }
+
+    /// @notice Total treasury wei (cumulative topped).
+    function getTotalTreasuryWeiNum() external view returns (uint256) {
+        return totalTreasuryWei;
+    }
+
+    /// @notice Total allocated wei (ever).
+    function getTotalAllocatedWeiNum() external view returns (uint256) {
+        return totalAllocatedWei;
+    }
+
+    /// @notice Total pulled wei (ever).
+    function getTotalPulledWeiNum() external view returns (uint256) {
+        return totalPulledWei;
+    }

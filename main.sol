@@ -1090,3 +1090,87 @@ contract MoonCapII {
     function getPodRiskTier(bytes32 podId) external view returns (uint8) {
         return _pods[podId].riskTier;
     }
+
+    /// @notice Single pod total stake.
+    function getPodTotalStake(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].totalStakeWei;
+    }
+
+    /// @notice Single pod frozen flag.
+    function isPodFrozen(bytes32 podId) external view returns (bool) {
+        return _pods[podId].frozen;
+    }
+
+    /// @notice Single pod exists flag.
+    function doesPodExist(bytes32 podId) external view returns (bool) {
+        return _pods[podId].exists;
+    }
+
+    /// @notice Pod curator address.
+    function getPodCurator(bytes32 podId) external view returns (address) {
+        return _pods[podId].curator;
+    }
+
+    /// @notice Pod min stake.
+    function getPodMinStake(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].minStakeWei;
+    }
+
+    /// @notice Pod max stake.
+    function getPodMaxStake(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].maxStakeWei;
+    }
+
+    /// @notice Pod created-at block.
+    function getPodCreatedAtBlock(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].createdAtBlock;
+    }
+
+    /// @notice Pod performance fee bps.
+    function getPodPerformanceFeeBps(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].performanceFeeBps;
+    }
+
+    /// @notice Pod management fee bps.
+    function getPodManagementFeeBps(bytes32 podId) external view returns (uint256) {
+        return _pods[podId].managementFeeBps;
+    }
+
+    // -------------------------------------------------------------------------
+    // ADDITIONAL VIEWS (analytics and off-chain indexing)
+    // -------------------------------------------------------------------------
+
+    /// @notice Returns pod IDs for a given risk tier by scanning (bounded).
+    function getPodIdsForTier(uint8 riskTier, uint256 maxReturn) external view returns (bytes32[] memory ids_) {
+        if (riskTier > MC2_MAX_RISK_TIER) revert MC2_InvalidRiskTier();
+        uint256 cap = maxReturn > _podIds.length ? _podIds.length : maxReturn;
+        uint256 found = 0;
+        bytes32[] memory tmp = new bytes32[](_podIds.length);
+        for (uint256 i = 0; i < _podIds.length && found < cap; i++) {
+            if (_pods[_podIds[i]].riskTier == riskTier) {
+                tmp[found] = _podIds[i];
+                found++;
+            }
+        }
+        ids_ = new bytes32[](found);
+        for (uint256 j = 0; j < found; j++) {
+            ids_[j] = tmp[j];
+        }
+    }
+
+    /// @notice Count pods by risk tier.
+    function countPodsByTier(uint8 riskTier) external view returns (uint256) {
+        if (riskTier > MC2_MAX_RISK_TIER) return 0;
+        uint256 c = 0;
+        for (uint256 i = 0; i < _podIds.length; i++) {
+            if (_pods[_podIds[i]].riskTier == riskTier) c++;
+        }
+        return c;
+    }
+
+    /// @notice Total stake in pods of a given risk tier.
+    function getTotalStakeForTier(uint8 riskTier) external view returns (uint256) {
+        return tierTotalStakeWei[riskTier];
+    }
+
+    /// @notice Whether global stats are consistent (total allocated - total pulled <= balance).

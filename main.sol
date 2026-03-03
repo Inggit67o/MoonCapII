@@ -1426,3 +1426,72 @@ contract MoonCapII {
     function getTotalPulledWeiNum() external view returns (uint256) {
         return totalPulledWei;
     }
+
+    /// @notice Allocation count (ever).
+    function getAllocationCountNum() external view returns (uint256) {
+        return allocationCount;
+    }
+
+    /// @notice Pull count (ever).
+    function getPullCountNum() external view returns (uint256) {
+        return pullCount;
+    }
+
+    /// @notice Net stake (allocated - pulled).
+    function getNetStakeWei() external view returns (uint256) {
+        return totalAllocatedWei > totalPulledWei ? totalAllocatedWei - totalPulledWei : 0;
+    }
+
+    /// @notice Denominator for basis points (10000).
+    function denomBps() external pure returns (uint256) {
+        return MC2_DENOM_BPS;
+    }
+
+    /// @notice Max risk tier (5).
+    function maxRiskTier() external pure returns (uint8) {
+        return MC2_MAX_RISK_TIER;
+    }
+
+    /// @notice Version hash for off-chain.
+    function versionHash() external pure returns (bytes32) {
+        return MC2_VERSION;
+    }
+
+    /// @notice Lattice namespace hash.
+    function latticeNamespace() external pure returns (bytes32) {
+        return MC2_LATTICE_NAMESPACE;
+    }
+
+    /// @notice Whether address is top curator.
+    function isCurator(address account) external view returns (bool) {
+        return account == topCurator;
+    }
+
+    /// @notice Whether address is fee collector.
+    function isFeeCollectorAddr(address account) external view returns (bool) {
+        return account == feeCollector;
+    }
+
+    /// @notice Whether address is emergency guard.
+    function isEmergencyGuardAddr(address account) external view returns (bool) {
+        return account == emergencyGuard;
+    }
+
+    /// @notice Whether address is treasury.
+    function isTreasuryAddr(address account) external view returns (bool) {
+        return account == treasury;
+    }
+
+    // -------------------------------------------------------------------------
+    // PURE HELPERS
+    // -------------------------------------------------------------------------
+
+    function derivePodId(address curator, bytes32 seed, uint256 salt) external pure returns (bytes32) {
+        return keccak256(abi.encodePacked(curator, seed, salt));
+    }
+
+    receive() external payable {
+        totalTreasuryWei += msg.value;
+        emit TreasuryTopped(msg.value, block.number);
+    }
+}

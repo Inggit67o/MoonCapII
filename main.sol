@@ -754,3 +754,87 @@ contract MoonCapII {
 
     /// @notice Compute global allocation fee for a given amount (pure-style using current globalFeeBps).
     function computeFeeForAmount(uint256 amountWei) external view returns (uint256 feeWei_, uint256 netWei_) {
+        feeWei_ = (amountWei * globalFeeBps) / MC2_DENOM_BPS;
+        netWei_ = amountWei - feeWei_;
+    }
+
+    /// @notice Check if tier cap would be exceeded by adding amount to pod.
+    function wouldExceedTierCap(bytes32 podId, uint256 amountWei) external view returns (bool) {
+        PodState storage pod = _pods[podId];
+        if (!pod.exists || tierCapWei[pod.riskTier] == 0) return false;
+        uint256 toPod = amountWei - (amountWei * globalFeeBps) / MC2_DENOM_BPS;
+        return tierTotalStakeWei[pod.riskTier] + toPod > tierCapWei[pod.riskTier];
+    }
+
+    /// @notice Number of stakers in a pod.
+    function getStakerCountInPod(bytes32 podId) external view returns (uint256) {
+        return _stakersInPod[podId].length;
+    }
+
+    /// @notice Staker address at index in pod (for enumeration).
+    function getStakerInPodAt(bytes32 podId, uint256 index) external view returns (address) {
+        if (index >= _stakersInPod[podId].length) revert MC2_InvalidBatchLength();
+        return _stakersInPod[podId][index];
+    }
+
+    /// @notice Total wei across all pods (sum of pod.totalStakeWei).
+    function getTotalStakeAcrossAllPods() external view returns (uint256 total_) {
+        for (uint256 i = 0; i < _podIds.length; i++) {
+            total_ += _pods[_podIds[i]].totalStakeWei;
+        }
+    }
+
+    /// @notice Pod IDs that have at least one snapshot.
+    function getPodIdsWithSnapshots(uint256 fromIndex, uint256 toIndex) external view returns (bytes32[] memory ids_, uint256[] memory counts_) {
+        if (fromIndex > toIndex || toIndex >= _podIds.length) revert MC2_InvalidBatchLength();
+        uint256 len = toIndex - fromIndex + 1;
+        ids_ = new bytes32[](len);
+        counts_ = new uint256[](len);
+        for (uint256 i = 0; i < len; i++) {
+            bytes32 id = _podIds[fromIndex + i];
+            ids_[i] = id;
+            counts_[i] = _podSnapshots[id].length;
+        }
+    }
+
+    /// @notice Last snapshot for a pod (if any).
+    function getLastSnapshot(bytes32 podId) external view returns (uint256 totalStakeWei_, uint256 blockNumber_, uint256 timestamp_) {
+        PodSnapshot[] storage snap = _podSnapshots[podId];
+        if (snap.length == 0) return (0, 0, 0);
+        PodSnapshot storage s = snap[snap.length - 1];
+        return (s.totalStakeWei, s.blockNumber, s.timestamp);
+    }
+
+    /// @notice Whether allocator list is at max capacity.
+    function isAllocatorListFull() external view returns (bool) {
+        return _allocatorList.length >= MC2_ALLOCATOR_LIST_MAX;
+    }
+
+    /// @notice Curator pod count (for topCurator).
+    function getCuratorPodCount(address curator) external view returns (uint256) {
+        return _podCountByCurator[curator];
+    }
+
+    /// @notice All pod IDs (length).
+    function getPodIdsLength() external view returns (uint256) {
+        return _podIds.length;
+    }
+
+    /// @notice Version namespace for off-chain identification.
+    function getVersionNamespace() external pure returns (bytes32) {
+        return MC2_VERSION;
+    }
+
+    /// @notice Lattice namespace for pause scope.
+    function getLatticeNamespace() external pure returns (bytes32) {
+        return MC2_LATTICE_NAMESPACE;
+    }
+
+    /// @notice Fee that would be charged for amount at given bps.
+    function computeFeeAtBps(uint256 amountWei, uint256 feeBps) external pure returns (uint256 feeWei_) {
+        if (feeBps > MC2_DENOM_BPS) return amountWei;
+        return (amountWei * feeBps) / MC2_DENOM_BPS;
+    }
+
+    /// @notice Net amount after fee at given bps.
+    function computeNetAtBps(uint256 amountWei, uint256 feeBps) external pure returns (uint256 netWei_) {

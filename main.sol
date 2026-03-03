@@ -838,3 +838,87 @@ contract MoonCapII {
 
     /// @notice Net amount after fee at given bps.
     function computeNetAtBps(uint256 amountWei, uint256 feeBps) external pure returns (uint256 netWei_) {
+        if (feeBps > MC2_DENOM_BPS) return 0;
+        return amountWei - (amountWei * feeBps) / MC2_DENOM_BPS;
+    }
+
+    /// @notice Validate risk tier (0..MC2_MAX_RISK_TIER).
+    function isValidRiskTier(uint8 riskTier) external pure returns (bool) {
+        return riskTier <= MC2_MAX_RISK_TIER;
+    }
+
+    /// @notice Max performance fee bps allowed.
+    function getPerformanceFeeBpsCap() external pure returns (uint256) {
+        return MC2_PERFORMANCE_FEE_BPS_CAP;
+    }
+
+    /// @notice Max management fee bps allowed.
+    function getManagementFeeBpsCap() external pure returns (uint256) {
+        return MC2_MANAGEMENT_FEE_BPS_CAP;
+    }
+
+    /// @notice Max batch allocation size.
+    function getMaxBatchAllocSize() external pure returns (uint256) {
+        return MC2_MAX_BATCH_ALLOC;
+    }
+
+    /// @notice Max pods per curator.
+    function getMaxPodsPerCurator() external pure returns (uint256) {
+        return MC2_MAX_PODS_PER_CURATOR;
+    }
+
+    /// @notice Max total pods.
+    function getMaxPods() external pure returns (uint256) {
+        return MC2_MAX_PODS;
+    }
+
+    /// @notice Default snapshot interval in blocks.
+    function getSnapshotInterval() external pure returns (uint256) {
+        return MC2_SNAPSHOT_INTERVAL;
+    }
+
+    /// @notice Max snapshots per pod.
+    function getMaxSnapshotsPerPod() external pure returns (uint256) {
+        return MC2_MAX_SNAPSHOTS_PER_POD;
+    }
+
+    /// @notice Get multiple pod summaries in one call (by index range).
+    function getPodSummaries(uint256 fromIndex, uint256 toIndex) external view returns (
+        bytes32[] memory podIds_,
+        uint8[] memory riskTiers_,
+        uint256[] memory totalStakes_,
+        bool[] memory frozen_
+    ) {
+        if (fromIndex > toIndex || toIndex >= _podIds.length) revert MC2_InvalidBatchLength();
+        uint256 len = toIndex - fromIndex + 1;
+        podIds_ = new bytes32[](len);
+        riskTiers_ = new uint8[](len);
+        totalStakes_ = new uint256[](len);
+        frozen_ = new bool[](len);
+        for (uint256 i = 0; i < len; i++) {
+            PodState storage p = _pods[_podIds[fromIndex + i]];
+            podIds_[i] = p.podId;
+            riskTiers_[i] = p.riskTier;
+            totalStakes_[i] = p.totalStakeWei;
+            frozen_[i] = p.frozen;
+        }
+    }
+
+    /// @notice Estimate management fee for blocks elapsed (per 1M blocks scaled).
+    function estimateManagementFeeForBlocks(uint256 principalWei, uint256 feeBps, uint256 blocksElapsed) external pure returns (uint256) {
+        if (feeBps > MC2_MANAGEMENT_FEE_BPS_CAP) return 0;
+        return (principalWei * feeBps * blocksElapsed) / (MC2_DENOM_BPS * 1_000_000);
+    }
+
+    /// @notice Bytes32 zero check for podId.
+    function isZeroPodId(bytes32 podId) external pure returns (bool) {
+        return podId == bytes32(0);
+    }
+
+    /// @notice Immutable addresses (for off-chain config).
+    function getImmutableAddresses() external view returns (
+        address topCurator_,
+        address feeCollector_,
+        address emergencyGuard_,
+        address treasury_
+    ) {

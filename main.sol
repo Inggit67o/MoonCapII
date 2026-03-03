@@ -670,3 +670,87 @@ contract MoonCapII {
     function wouldAllocateSucceed(bytes32 podId, uint256 amountWei) external view returns (bool) {
         if (podId == bytes32(0) || amountWei == 0) return false;
         PodState storage pod = _pods[podId];
+        if (!pod.exists || pod.frozen) return false;
+        if (pod.minStakeWei > 0 && amountWei < pod.minStakeWei) return false;
+        if (pod.maxStakeWei > 0 && pod.totalStakeWei + amountWei > pod.maxStakeWei) return false;
+        uint256 toPod = amountWei - (amountWei * globalFeeBps) / MC2_DENOM_BPS;
+        if (tierCapWei[pod.riskTier] > 0 && tierTotalStakeWei[pod.riskTier] + toPod > tierCapWei[pod.riskTier]) return false;
+        return true;
+    }
+
+    function getManagementFeeAccrued(bytes32 podId, uint256 upToBlock) external view returns (uint256) {
+        PodState storage pod = _pods[podId];
+        if (!pod.exists || pod.managementFeeBps == 0) return 0;
+        uint256 fromBlock = pod.lastFeeBlock;
+        if (upToBlock <= fromBlock) return 0;
+        uint256 blocksElapsed = upToBlock - fromBlock;
+        return (pod.totalStakeWei * pod.managementFeeBps * blocksElapsed) / (MC2_DENOM_BPS * 1_000_000);
+    }
+
+    /// @notice Returns full pod details in one call for off-chain indexing.
+    function getFullPodDetails(bytes32 podId) external view returns (
+        address curator_,
+        uint8 riskTier_,
+        uint256 totalStakeWei_,
+        uint256 minStakeWei_,
+        uint256 maxStakeWei_,
+        uint256 performanceFeeBps_,
+        uint256 managementFeeBps_,
+        uint256 lastFeeBlock_,
+        uint256 createdAtBlock_,
+        bool frozen_,
+        bool exists_,
+        uint256 snapshotCount_
+    ) {
+        PodState storage p = _pods[podId];
+        return (
+            p.curator,
+            p.riskTier,
+            p.totalStakeWei,
+            p.minStakeWei,
+            p.maxStakeWei,
+            p.performanceFeeBps,
+            p.managementFeeBps,
+            p.lastFeeBlock,
+            p.createdAtBlock,
+            p.frozen,
+            p.exists,
+            _podSnapshots[podId].length
+        );
+    }
+
+    /// @notice Returns stats for all risk tiers in one call.
+    function getTierStatsBatch() external view returns (
+        uint256[] memory totalStakeWei_,
+        uint256[] memory podCounts_,
+        uint256[] memory capsWei_
+    ) {
+        uint256 n = MC2_MAX_RISK_TIER + 1;
+        totalStakeWei_ = new uint256[](n);
+        podCounts_ = new uint256[](n);
+        capsWei_ = new uint256[](n);
+        for (uint8 t = 0; t <= MC2_MAX_RISK_TIER; t++) {
+            totalStakeWei_[t] = tierTotalStakeWei[t];
+            podCounts_[t] = tierPodCount[t];
+            capsWei_[t] = tierCapWei[t];
+        }
+    }
+
+    /// @notice Sum of staker balance across given pods.
+    function getStakerTotalAcrossPods(address staker, bytes32[] calldata podIds) external view returns (uint256 total_) {
+        for (uint256 i = 0; i < podIds.length; i++) {
+            total_ += _stakeInPod[podIds[i]][staker];
+        }
+    }
+
+    /// @notice Blocks remaining until staker can pull from pod (0 if already allowed).
+    function blocksUntilCanPull(bytes32 podId, address staker) external view returns (uint256) {
+        uint256 last = _lastPullBlock[podId][staker];
+        if (last == 0) return 0;
+        uint256 elapsed = block.number - last;
+        if (elapsed >= cooldownBlocks) return 0;
+        return cooldownBlocks - elapsed;
+    }
+
+    /// @notice Compute global allocation fee for a given amount (pure-style using current globalFeeBps).
+    function computeFeeForAmount(uint256 amountWei) external view returns (uint256 feeWei_, uint256 netWei_) {

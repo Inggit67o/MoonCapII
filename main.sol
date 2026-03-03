@@ -922,3 +922,87 @@ contract MoonCapII {
         address emergencyGuard_,
         address treasury_
     ) {
+        return (topCurator, feeCollector, emergencyGuard, treasury);
+    }
+
+    /// @notice Get pod data for multiple pod IDs in one call.
+    function getPodsBatch(bytes32[] calldata podIds) external view returns (
+        address[] memory curators_,
+        uint8[] memory riskTiers_,
+        uint256[] memory totalStakes_,
+        uint256[] memory minStakes_,
+        uint256[] memory maxStakes_,
+        bool[] memory frozen_,
+        bool[] memory exists_
+    ) {
+        uint256 n = podIds.length;
+        if (n > MC2_MAX_BATCH_ALLOC) revert MC2_InvalidBatchLength();
+        curators_ = new address[](n);
+        riskTiers_ = new uint8[](n);
+        totalStakes_ = new uint256[](n);
+        minStakes_ = new uint256[](n);
+        maxStakes_ = new uint256[](n);
+        frozen_ = new bool[](n);
+        exists_ = new bool[](n);
+        for (uint256 i = 0; i < n; i++) {
+            PodState storage p = _pods[podIds[i]];
+            curators_[i] = p.curator;
+            riskTiers_[i] = p.riskTier;
+            totalStakes_[i] = p.totalStakeWei;
+            minStakes_[i] = p.minStakeWei;
+            maxStakes_[i] = p.maxStakeWei;
+            frozen_[i] = p.frozen;
+            exists_[i] = p.exists;
+        }
+    }
+
+    /// @notice Stake amounts for one staker across multiple pods (same as getStakerPortfolio but explicit name).
+    function getStakesForPods(address staker, bytes32[] calldata podIds) external view returns (uint256[] memory) {
+        uint256[] memory out = new uint256[](podIds.length);
+        for (uint256 i = 0; i < podIds.length; i++) {
+            out[i] = _stakeInPod[podIds[i]][staker];
+        }
+        return out;
+    }
+
+    /// @notice All risk label hashes (for off-chain mapping).
+    function getAllRiskLabels() external pure returns (bytes32[] memory labels_) {
+        labels_ = new bytes32[](6);
+        labels_[0] = MC2_RISK_LABEL_0;
+        labels_[1] = MC2_RISK_LABEL_1;
+        labels_[2] = MC2_RISK_LABEL_2;
+        labels_[3] = MC2_RISK_LABEL_3;
+        labels_[4] = MC2_RISK_LABEL_4;
+        labels_[5] = MC2_RISK_LABEL_5;
+    }
+
+    /// @notice Denominator for basis points (10000).
+    function getDenomBps() external pure returns (uint256) {
+        return MC2_DENOM_BPS;
+    }
+
+    /// @notice Total allocator count (whitelist length).
+    function getTotalAllocatorCount() external view returns (uint256) {
+        return _allocatorList.length;
+    }
+
+    /// @notice Check if address is the top curator.
+    function isTopCurator(address account) external view returns (bool) {
+        return account == topCurator;
+    }
+
+    /// @notice Check if address is the emergency guard.
+    function isEmergencyGuard(address account) external view returns (bool) {
+        return account == emergencyGuard;
+    }
+
+    /// @notice Check if address is the fee collector.
+    function isFeeCollector(address account) external view returns (bool) {
+        return account == feeCollector;
+    }
+
+    /// @notice Check if address is the treasury.
+    function isTreasury(address account) external view returns (bool) {
+        return account == treasury;
+    }
+
